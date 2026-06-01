@@ -1,4 +1,0 @@
-requests==2.33.0
-numpy
-totally-fake-hallucination-package-12345
-keyrings
