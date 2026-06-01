@@ -1,0 +1,14 @@
+name: "Test Action Locally"
+on: [push]
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run AI Dependency Guard
+        uses: ./
+        with:
+          scan_path: '.'
