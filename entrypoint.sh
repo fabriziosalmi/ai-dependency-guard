@@ -1,2 +1,2 @@
 #!/bin/sh -l
-python3 /scanner.py "$INPUT_SCAN_PATH" "$INPUT_BLOCKLIST"
+python3 /scanner.py --scan-path "$INPUT_SCAN_PATH" --blocklist "$INPUT_BLOCKLIST"
