@@ -1,37 +1,49 @@
-# AI Dependency Guard 🛡️
+# AI Dependency Guard
 
-**AI Dependency Guard** is a GitHub Action that automatically scans your Pull Requests and commits to ensure no **LLM-hallucinated packages** enter your dependency tree.
+## Overview
+AI Dependency Guard is an automated, zero-dependency GitHub Action designed to mitigate the risk of *Phantom Dependency Squatting* within Continuous Integration pipelines. 
 
-Large Language Models (LLMs) often hallucinate fake packages when generating boilerplate code (e.g., `requirements.txt` or `package.json`). If these are committed to your repository, malicious actors can register those exact names on PyPI or npm, leading to a critical supply chain attack known as **Phantom Dependency Squatting**.
+Large Language Models (LLMs) utilized for code generation frequently hallucinate non-existent dependencies within production manifests (e.g., `requirements.txt` and `package.json`). If these fabricated namespaces are committed to a version control system, the repository becomes vulnerable to supply chain attacks. Threat actors can register these hallucinated names on public registries, resulting in arbitrary code execution during subsequent downstream builds.
 
-This action blocks the PR by failing the CI build if a package is 404 Not Found on PyPI or npm, OR if it matches a known defensively squatted package.
+This action parses dependency manifests during the Pull Request or push phases and performs real-time validation against the official PyPI and npm APIs. The CI pipeline will fail deterministically if a hallucinated dependency is detected.
 
-## Usage
+## Two-Tier Evaluation Architecture
 
-Create a file in your repository `.github/workflows/ai-guard.yml`:
+The action employs a dual-validation mechanism to ensure comprehensive protection:
+
+1. **Tier 1 (Explicit Blocklist / HTTP 200 Bypass Mitigation):** 
+   If a hallucinated package has already been maliciously or defensively squatted, the public registry will return an `HTTP 200 OK` status, bypassing naive 404-checkers. This action evaluates every extracted dependency against an explicit blocklist of known hijacked or defensively squatted namespaces prior to executing network requests.
+   
+2. **Tier 2 (Real-Time API Validation / HTTP 404 Detection):** 
+   Dependencies not intercepted by the Tier 1 blocklist are queried against the official PyPI and npm JSON APIs. If the registry returns an `HTTP 404 Not Found` response, the dependency is flagged as an active hallucination risk.
+
+## Usage Instructions
+
+To integrate AI Dependency Guard into your CI/CD pipeline, create a workflow file (e.g., `.github/workflows/ai-guard.yml`) with the following configuration:
 
 ```yaml
-name: AI Dependency Guard
+name: AI Dependency Guard Validation
 on: [push, pull_request]
 
 jobs:
-  scan:
+  validate-dependencies:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Scan for Hallucinated Dependencies
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Execute AI Dependency Guard
         uses: fabriziosalmi/ai-dependency-guard@v1
         with:
-          # Optional: Add your own custom malicious packages to block
-          # Default includes top known hallucinations (keyrings, jaraco, google-colab, etc.)
-          blocklist: 'my-custom-bad-package, another-one'
+          # Optional: Define the root directory for manifest scanning.
+          scan_path: '.'
+          
+          # Optional: Append custom namespaces to the explicit blocklist.
+          # The default implementation includes empirical top-tier hallucinated packages.
+          blocklist: 'keyrings,jaraco,google-colab,ruamel,en_core_web_sm'
 ```
 
-## How It Works (Two-Tier Detection)
-1. **Blocklist Check (HTTP 200 Bypass Protection):** Checks packages against a blocklist of known actively squatted or defensively mitigated packages that would otherwise return HTTP 200 OK.
-2. **Registry 404 Detection:** Verifies the existence of unknown packages directly against PyPI and npm public APIs. If it doesn't exist, it's vulnerable to squatting.
-
-## Features
-- 🐍 **PyPI Support**: Scans `requirements.txt`
-- 📦 **NPM Support**: Scans `package.json`
-- ⚡ **Zero Configuration**: Built-in default blocklist protects you out of the box.
+## Technical Specifications
+- **Supported Manifests:** `requirements.txt` (Python/PyPI), `package.json` (Node.js/npm).
+- **Network Constraints:** The action utilizes standard HTTP libraries and incorporates deliberate timing delays (100ms) between API requests to strictly adhere to registry rate-limiting policies.
+- **Fail-Open Posture:** In the event of a registry network timeout or HTTP 5xx error, the action will default to an `HTTP 200` assumption to prevent blocking the CI pipeline due to infrastructure instability.
